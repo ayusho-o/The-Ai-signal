@@ -113,6 +113,11 @@ export function buildAppSpecPrompt(
     })
     .filter(Boolean);
 
+  // Build a compact action ID reference — model reads IDs when they are the only option presented
+  const actionIdReference = registeredIntegrations
+    .map((i) => `  ${i.id}: [${i.actions.map((a) => a.id).join(", ")}]`)
+    .join("\n");
+
   return `Convert this DataSchema into a complete AppSpec.
 
 App Details:
@@ -124,8 +129,11 @@ App Details:
 DataSchema (use ONLY these entity names):
 ${JSON.stringify(schema, null, 2)}
 
-Registered integrations you MUST use (use ONLY these IDs):
-${JSON.stringify(registeredIntegrations, null, 2)}
+VALID INTEGRATION IDs (use ONLY these exact IDs in integration and integrationId fields):
+${registry.map((r) => r.id).join(", ")}
+
+VALID ACTION IDs per integration (use ONLY these exact action IDs in workflowStubs.action):
+${actionIdReference}
 
 Integration matches for requested integrations:
 ${JSON.stringify(requestedIntegrations, null, 2)}
@@ -136,8 +144,9 @@ Requirements:
 3. Add a dashboard page if analytics is a feature
 4. For each requested integration, create at least one workflowStub using the matched integration ID
 5. Auth roles: admin (full access), user (read+write), and any domain-specific roles
-6. Every workflowStub.integration must be one of: ${registry.map((r) => r.id).join(", ")}
-7. boundEntity values must be exactly: ${schema.entities.map((e) => e.name).join(", ")}
+6. Every workflowStub.integration MUST be exactly one of: ${registry.map((r) => r.id).join(", ")}
+7. boundEntity values MUST be exactly one of: ${schema.entities.map((e) => e.name).join(", ")}
+8. workflowStub.action MUST be one of the action IDs listed above for the chosen integration
 
 Return the AppSpec JSON now.`;
 }

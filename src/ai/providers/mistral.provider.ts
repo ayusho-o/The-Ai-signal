@@ -43,6 +43,10 @@ export async function callMistral(
     messages,
     temperature: options.temperature ?? 0.3,
     max_tokens: options.maxTokens ?? 4096,
+    // Enable JSON mode for structured outputs when requested
+    ...(options.responseFormat === "json"
+      ? { response_format: { type: "json_object" as const } }
+      : {}),
   });
 
   const latencyMs = Date.now() - start;

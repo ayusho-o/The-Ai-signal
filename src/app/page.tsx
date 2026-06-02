@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 
 // ─── Design Tokens ─────────────────────────────────────────────────────────────
 const C = {
@@ -318,8 +318,19 @@ function StageTracker({ events, job, isRunning }: { events: any[]; job: any; isR
     if (s.some((e:any)=>e.type==="stage_start")) return "running";
     return "pending";
   };
-  const sm = (id: string) => events.find(e=>e.stage===id&&e.type==="stage_complete")?.metrics || null;
-  const sr = (id: string) => events.find(e=>e.stage===id&&e.type==="stage_complete")?.repairLog || [];
+  const sm = (id: string) => {
+    // Prefer metrics from SSE event; fall back to job.stageMetrics (loaded after page refresh)
+    const fromEvent = events.find(e=>e.stage===id&&e.type==="stage_complete")?.metrics;
+    if (fromEvent) return fromEvent;
+    const fromJob = job?.stageMetrics?.[id];
+    if (fromJob && fromJob.status !== "pending" && fromJob.status !== "running") return fromJob;
+    return null;
+  };
+  const sr = (id: string) => {
+    const fromEvent = events.find(e=>e.stage===id&&e.type==="stage_complete")?.repairLog;
+    if (fromEvent) return fromEvent;
+    return job?.stageMetrics?.[id]?.repairAttempts ?? [];
+  };
   const isComplete = job?.status==="completed";
   const isFailed = job?.status==="failed";
   const intentData = events.find(e=>e.stage==="intent_extraction"&&e.type==="stage_complete")?.data;
@@ -393,8 +404,9 @@ function StageTracker({ events, job, isRunning }: { events: any[]; job: any; isR
 // ─── AppSpecRenderer ───────────────────────────────────────────────────────────
 function AppSpecRenderer({ job, events }: { job: any; events: any[] }) {
   const methodColors: Record<string,string> = {GET:C.success,POST:C.accent,PUT:C.warning,PATCH:"#facc15",DELETE:C.error};
-  const intentData = events.find(e=>e.stage==="intent_extraction"&&e.type==="stage_complete")?.data;
-  const schemaData = events.find(e=>e.stage==="schema_generation"&&e.type==="stage_complete")?.data;
+  // Pull intent from SSE event first, then fall back to job object (populated after API fetch)
+  const intentData = events.find(e=>e.stage==="intent_extraction"&&e.type==="stage_complete")?.data ?? job?.intent;
+  const schemaData = events.find(e=>e.stage==="schema_generation"&&e.type==="stage_complete")?.data ?? job?.schema;
   if (!job) return <div style={{textAlign:"center",padding:"60px 0",color:C.textDim,fontFamily:"monospace",fontSize:13}}>No generation in progress. Submit a prompt to generate an AppSpec.</div>;
   if (job.status==="running") return <div style={{textAlign:"center",padding:"60px 0",color:C.textDim,fontFamily:"monospace",fontSize:13}}><div style={{width:8,height:8,borderRadius:"50%",background:C.warning,margin:"0 auto 12px",animation:"pulseDot 1s ease-in-out infinite"}}/>Pipeline running…</div>;
   if (!job.appSpec) return <div style={{textAlign:"center",padding:"60px 0",color:C.textDim,fontFamily:"monospace",fontSize:13}}>AppSpec not yet generated.</div>;
@@ -686,22 +698,39 @@ function EvalPanel() {
   );
 }
 
-// ─── IntegrationPanel ──────────────────────────────────────────────────────────
+// ─── IntegrationPanel — fetches from real /api/integrations ───────────────────
 function IntegrationPanel() {
+  const [list, setList] = React.useState<any[]>([]);
+  const [meta, setMeta] = React.useState<{count:number;implemented:number;stubbed:number}|null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [loadErr, setLoadErr] = React.useState<string|null>(null);
   const [sel, setSel] = useState<string | null>(null);
-  const impl = INTEGRATIONS.filter(i=>i.implemented).length;
-  const stubbed = INTEGRATIONS.filter(i=>!i.implemented).length;
-  const s = INTEGRATIONS.find(i=>i.id===sel);
+
+  React.useEffect(() => {
+    fetch("/api/integrations")
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then((d: any) => {
+        setList(d.integrations ?? []);
+        setMeta({ count: d.count, implemented: d.implemented, stubbed: d.stubbed });
+        setLoading(false);
+      })
+      .catch((e: Error) => { setLoadErr(e.message); setLoading(false); });
+  }, []);
+
+  if (loading) return <div style={{textAlign:"center",padding:"60px 0",color:C.textDim,fontFamily:"monospace",fontSize:13}}>Loading integration registry…</div>;
+  if (loadErr) return <div style={{textAlign:"center",padding:"60px 0",color:C.error,fontFamily:"monospace",fontSize:13}}>Failed to load registry: {loadErr}</div>;
+
+  const s = list.find((i:any) => i.id === sel);
   return (
     <div style={{maxWidth:1000}}>
       <div style={{display:"flex",gap:24,marginBottom:20,fontSize:11,fontFamily:"monospace"}}>
-        <span><span style={{color:C.textDim}}>Total: </span><span style={{color:C.text,fontWeight:700}}>{INTEGRATIONS.length}</span></span>
-        <span><span style={{color:C.success}}>● </span><span style={{color:C.textDim}}>Implemented: </span><span style={{color:C.success,fontWeight:700}}>{impl}</span></span>
-        <span><span style={{color:C.warning}}>○ </span><span style={{color:C.textDim}}>Stubbed (explicit): </span><span style={{color:C.warning,fontWeight:700}}>{stubbed}</span></span>
+        <span><span style={{color:C.textDim}}>Total: </span><span style={{color:C.text,fontWeight:700}}>{meta?.count ?? list.length}</span></span>
+        <span><span style={{color:C.success}}>● </span><span style={{color:C.textDim}}>Implemented: </span><span style={{color:C.success,fontWeight:700}}>{meta?.implemented ?? 0}</span></span>
+        <span><span style={{color:C.warning}}>○ </span><span style={{color:C.textDim}}>Stubbed: </span><span style={{color:C.warning,fontWeight:700}}>{meta?.stubbed ?? 0}</span></span>
       </div>
       <div style={{display:"flex",gap:16}}>
         <div style={{width:200,flexShrink:0,display:"flex",flexDirection:"column",gap:4}}>
-          {INTEGRATIONS.map(intg => (
+          {list.map((intg:any) => (
             <button key={intg.id} onClick={()=>setSel(sel===intg.id?null:intg.id)}
               style={{textAlign:"left",padding:"8px 12px",borderRadius:6,border:`1px solid ${sel===intg.id?C.accent:C.border}`,background:sel===intg.id?"rgba(99,102,241,.1)":C.surface,cursor:"pointer",transition:"all .2s"}}>
               <div style={{display:"flex",alignItems:"center",gap:8,fontSize:12,fontFamily:"monospace",color:sel===intg.id?C.text:C.textDim}}>
@@ -725,23 +754,23 @@ function IntegrationPanel() {
                 <p style={{fontSize:12,fontFamily:"monospace",color:C.textDim,margin:0}}>{s.description}</p>
               </div>
               <div>
-                <div style={{fontSize:11,fontFamily:"monospace",color:C.textDim,marginBottom:6}}>Triggers ({s.triggers.length}):</div>
-                {s.triggers.map((t,i) => (
+                <div style={{fontSize:11,fontFamily:"monospace",color:C.textDim,marginBottom:6}}>Triggers ({s.triggers?.length ?? 0}):</div>
+                {(s.triggers ?? []).map((t:any,i:number) => (
                   <div key={i} style={{display:"flex",gap:10,fontSize:11,fontFamily:"monospace",background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:"5px 12px",marginBottom:4}}>
                     <span style={{color:C.accent}}>{t.event}</span><span style={{color:C.textDim}}>—</span><span style={{color:C.textDim}}>{t.description}</span>
                   </div>
                 ))}
               </div>
               <div>
-                <div style={{fontSize:11,fontFamily:"monospace",color:C.textDim,marginBottom:6}}>Actions ({s.actions.length}) — validated action IDs:</div>
-                {s.actions.map((action,i) => (
+                <div style={{fontSize:11,fontFamily:"monospace",color:C.textDim,marginBottom:6}}>Actions ({s.actions?.length ?? 0}) — validated IDs:</div>
+                {(s.actions ?? []).map((action:any,i:number) => (
                   <div key={i} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:14,marginBottom:8}}>
                     <div style={{marginBottom:6}}>
                       <span style={{fontSize:13,fontFamily:"monospace",fontWeight:600,color:C.text}}>{action.name}</span>
                       <span style={{fontSize:11,fontFamily:"monospace",color:C.accent,marginLeft:10}}>id: {action.id}</span>
                     </div>
                     <p style={{fontSize:11,fontFamily:"monospace",color:C.textDim,margin:"0 0 8px"}}>{action.description}</p>
-                    {action.inputSchema.map((f: any,j: number) => (
+                    {(action.inputSchema ?? []).map((f:any,j:number) => (
                       <div key={j} style={{display:"flex",gap:10,fontSize:11,fontFamily:"monospace",paddingLeft:12,marginBottom:3}}>
                         <span style={{color:f.required?C.text:C.textDim,minWidth:100}}>{f.name}</span>
                         <span style={{color:C.textDim,minWidth:60}}>{f.type}</span>
@@ -770,6 +799,27 @@ export default function App() {
   const [events, setEvents] = useState<any[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const esRef = React.useRef<EventSource | null>(null);
+
+  // Fetch the latest job state from the real API
+  const fetchJob = React.useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`/api/generate/${id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setJob(data);
+      }
+    } catch {
+      // non-fatal — job state shown from SSE events
+    }
+  }, []);
+
+  // Cleanup SSE on unmount
+  React.useEffect(() => {
+    return () => {
+      if (esRef.current) { esRef.current.close(); esRef.current = null; }
+    };
+  }, []);
 
   const startGeneration = useCallback(async (prompt: string) => {
     setError(null);
@@ -778,29 +828,65 @@ export default function App() {
     setJobId(null);
     setIsRunning(true);
     setActiveTab("pipeline");
-    const id = Math.random().toString(36).slice(2,10);
-    setJobId(id);
+
+    // Close any existing stream
+    if (esRef.current) { esRef.current.close(); esRef.current = null; }
+
     try {
-      let finalIntent: any = null, finalSchema: any = null, finalAppSpec: any = null, totalCost = 0, totalLatency = 0;
-      await simulatePipeline(prompt, (event: any) => {
-        setEvents(prev => [...prev, event]);
-        if (event.type==="generation_complete") {
-          setIsRunning(false);
-          const d = event.data || {};
-          finalIntent = d.intent;
-          finalSchema = d.schema;
-          finalAppSpec = d.appSpec;
-          totalCost = d.totalCostUsd || 0;
-          totalLatency = d.totalLatencyMs || 0;
-          setJob({jobId:id,status:d.appSpec?"completed":"completed",prompt,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),intent:finalIntent,schema:finalSchema,appSpec:finalAppSpec,stageMetrics:{},totalCostUsd:totalCost,totalLatencyMs:totalLatency});
-          if (d.appSpec) setActiveTab("appspec");
-        }
+      // 1 — Start the real pipeline
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
       });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error((data as any).error ?? `HTTP ${res.status}`);
+      }
+
+      const { jobId: newJobId } = await res.json() as { jobId: string };
+      setJobId(newJobId);
+
+      // 2 — Open SSE stream
+      const es = new EventSource(`/api/generate/${newJobId}/stream`);
+      esRef.current = es;
+
+      const handleEvent = (e: MessageEvent, type: string) => {
+        try {
+          const parsed = JSON.parse(e.data as string);
+          setEvents(prev => [...prev, { ...parsed, type }]);
+
+          if (type === "generation_complete" || type === "generation_failed") {
+            setIsRunning(false);
+            void fetchJob(newJobId);
+            es.close();
+            esRef.current = null;
+            if (type === "generation_complete") setActiveTab("appspec");
+          }
+          if (type === "stage_complete" || type === "stage_failed") {
+            void fetchJob(newJobId);
+          }
+        } catch {
+          // malformed SSE data — ignore
+        }
+      };
+
+      for (const t of ["stage_start","stage_complete","stage_failed","generation_complete","generation_failed","repair_attempt","heartbeat"]) {
+        es.addEventListener(t, (e: MessageEvent) => handleEvent(e, t));
+      }
+
+      es.onerror = () => {
+        setIsRunning(false);
+        setError("Stream connection lost. Check the server logs.");
+        es.close();
+        esRef.current = null;
+      };
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setIsRunning(false);
     }
-  }, []);
+  }, [fetchJob]);
 
   const stageErrors = events.filter(e=>e.type==="stage_failed");
   const hasErrors = stageErrors.length > 0 || !!error;
