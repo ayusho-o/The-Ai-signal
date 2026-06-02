@@ -194,15 +194,7 @@ export async function generateRepairWithAI(
         );
         return await fn(options, failedModel);
       }
-    } catch (sameProviderErr) {
-      logger.warn(
-        {
-          provider: failedProvider,
-          model: failedModel,
-          error: sameProviderErr instanceof Error ? sameProviderErr.message : String(sameProviderErr),
-        },
-        "Repair: same-provider retry failed, escalating"
-      );
+    } catch {
       // fall through to escalation
     }
   }
@@ -216,14 +208,7 @@ export async function generateRepairWithAI(
     if (fn) {
       return await fn(options, repairPrimary.model);
     }
-  } catch (escalatedPrimaryErr) {
-    logger.warn(
-      {
-        provider: repairPrimary.provider,
-        error: escalatedPrimaryErr instanceof Error ? escalatedPrimaryErr.message : String(escalatedPrimaryErr),
-      },
-      "Repair escalation: primary failed, trying fallback"
-    );
+  } catch {
     const fn = PROVIDER_MAP[repairFallback.provider];
     if (fn) {
       return await fn(options, repairFallback.model);

@@ -25,11 +25,10 @@ export const OnDeleteSchema = z.enum([
 export const FieldSchemaZod = z.object({
   name: z.string().min(1),
   type: FieldTypeSchema,
-  // Make boolean flags optional with defaults — AI frequently omits these
-  nullable: z.boolean().optional().default(true),
-  isRelation: z.boolean().optional().default(false),
-  isPrimary: z.boolean().optional().default(false),
-  isUnique: z.boolean().optional().default(false),
+  nullable: z.boolean(),
+  isRelation: z.boolean(),
+  isPrimary: z.boolean(),
+  isUnique: z.boolean(),
   defaultValue: z
     .union([z.string(), z.number(), z.boolean(), z.null()])
     .optional(),
@@ -40,7 +39,7 @@ export const RelationSchemaZod = z.object({
   type: RelationTypeSchema,
   target: z.string().min(1),
   foreignKey: z.string().min(1),
-  onDelete: OnDeleteSchema.optional().default("SET_NULL"),
+  onDelete: OnDeleteSchema,
 });
 
 export const EntitySchemaZod = z.object({

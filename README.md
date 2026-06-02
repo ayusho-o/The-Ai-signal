@@ -83,13 +83,13 @@ User Prompt
 ### Stage 2 — Schema Generation
 - **Input:** AppIntent
 - **Output:** `DataSchema` — entities with fields, relations, tenantId enforcement
-- **Model:** OpenAI gpt-4o-mini (primary) → Anthropic claude-3-5-haiku (fallback)
+- **Model:** GPT-4o (primary) → Claude 3.5 Sonnet (fallback)
 - **Validation:** tenantId presence, bidirectional relation consistency, snake_case tableName
 
 ### Stage 3 — AppSpec Generation
 - **Input:** DataSchema + AppIntent
 - **Output:** `AppSpec` — pages, API endpoints, auth roles, integrationHooks, workflowStubs
-- **Model:** OpenAI gpt-4o-mini (primary) → Anthropic claude-3-5-haiku (fallback)
+- **Model:** Claude 3.5 Sonnet (primary) → GPT-4o (fallback)
 - **Validation:** page↔API consistency, entity reference resolution, integration registry validation
 
 ---
@@ -117,7 +117,7 @@ Three classified strategies before any AI retry:
 |---|---|---|
 | `STRUCTURAL_REPAIR` | `MALFORMED_JSON`, markdown wrapping, truncation | Extract JSON, close open braces, strip fences |
 | `FIELD_REPAIR` | `MISSING_FIELD`, `WRONG_TYPE`, `MISSING_TENANT_ID` | Inject typed defaults programmatically |
-| `CONSISTENCY_REPAIR` | `BROKEN_REFERENCE`, `INVALID_INTEGRATION_REF`, `INVALID_ACTION_REF`, `PAGE_WITHOUT_ENDPOINT` | Fuzzy-match entity/integration names, substitute first valid action ID, drop unresolvable stubs |
+| `CONSISTENCY_REPAIR` | `BROKEN_REFERENCE`, `INVALID_INTEGRATION_REF`, `PAGE_WITHOUT_ENDPOINT` | Fuzzy-match entity/integration names, drop unresolvable stubs |
 | `AI_RETRY` | All strategies failed | Targeted re-prompt with specific error context (same provider) |
 | `ESCALATED_AI_RETRY` | AI_RETRY failed | Different provider from routing config |
 
@@ -132,8 +132,8 @@ Config-driven routing in `src/ai/routing.config.ts`:
 | Stage | Primary | Fallback |
 |---|---|---|
 | intent_extraction | groq / llama-3.1-8b-instant | openai / gpt-4o-mini |
-| schema_generation | groq / llama-3.3-70b-versatile | groq / llama-3.1-8b-instant |
-| appspec_generation | groq / llama-3.3-70b-versatile | groq / llama-3.1-8b-instant |
+| schema_generation | openai / gpt-4o | anthropic / claude-3-5-sonnet |
+| appspec_generation | anthropic / claude-3-5-sonnet | openai / gpt-4o |
 | repair | openai / gpt-4o-mini | groq / llama-3.1-8b-instant |
 
 On 429 or 5xx → automatic OpenRouter fallback with equivalent model.

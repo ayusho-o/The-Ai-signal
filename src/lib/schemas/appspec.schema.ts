@@ -42,7 +42,7 @@ export const PageSpecZod = z.object({
   name: z.string().min(1),
   route: z.string().startsWith("/"),
   layout: PageLayoutSchema,
-  boundEntity: z.string().min(1, "boundEntity is required"),
+  boundEntity: z.string().min(1).nullable(),
   components: z.array(PageComponentZod).min(1),
 });
 
@@ -50,7 +50,7 @@ export const ApiEndpointZod = z.object({
   path: z.string().startsWith("/"),
   method: HttpMethodSchema,
   handlerDescription: z.string().min(1),
-  boundEntity: z.string().min(1, "boundEntity is required"),
+  boundEntity: z.string().min(1).nullable(),
   authRequired: z.boolean(),
   rateLimitFlag: z.boolean(),
   requestBodyFields: z.array(z.string()).optional(),

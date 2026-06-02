@@ -73,30 +73,30 @@ export const ROUTING_CONFIG: Record<PipelineStage | "repair", StageRouting> = {
 
   schema_generation: {
     primary: {
-      provider: "groq",
-      model: "llama-3.3-70b-versatile",
+      provider: "gemini",
+      model: "gemini-1.5-flash",
       maxTokens: 4000,
       temperature: 0.2,
     },
     fallback: {
       provider: "groq",
       model: "llama-3.1-8b-instant",
-      maxTokens: 2000,
+      maxTokens: 4000,
       temperature: 0.1,
     },
   },
 
   appspec_generation: {
     primary: {
-      provider: "groq",
-      model: "llama-3.3-70b-versatile",
-      maxTokens: 4000,
+      provider: "gemini",
+      model: "gemini-1.5-flash",
+      maxTokens: 6000,
       temperature: 0.2,
     },
     fallback: {
       provider: "groq",
       model: "llama-3.1-8b-instant",
-      maxTokens: 2000,
+      maxTokens: 6000,
       temperature: 0.1,
     },
   },
