@@ -26,7 +26,7 @@ export default function RootLayout({
             </span>
           </div>
           <div className="ml-auto text-xs text-atlas-text-dim font-mono">
-            intent → schema → appspec
+            intent → schema → appspec · groq/gemini/openai fallback chain
           </div>
         </header>
         <main>{children}</main>

@@ -825,14 +825,6 @@ export default function App() {
         ::-webkit-scrollbar-thumb:hover{background:${C.accent};}
         button:focus{outline:none;}
       `}</style>
-      <header style={{borderBottom:`1px solid ${C.border}`,padding:"12px 24px",display:"flex",alignItems:"center",gap:12}}>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <span style={{width:8,height:8,borderRadius:"50%",background:C.accent,animation:"pulseDot 1s ease-in-out infinite",display:"inline-block"}}/>
-          <span style={{fontSize:13,fontFamily:"monospace",fontWeight:600,color:C.text}}>OneAtlas</span>
-          <span style={{fontSize:11,fontFamily:"monospace",color:C.textDim}}>AI Pipeline v0.1</span>
-        </div>
-        <div style={{marginLeft:"auto",fontSize:11,fontFamily:"monospace",color:C.textDim}}>intent → schema → appspec · groq/gemini/openai fallback chain</div>
-      </header>
       <div style={{borderBottom:`1px solid ${C.border}`,padding:"16px 24px"}}>
         <PromptPanel onSubmit={startGeneration} isRunning={isRunning} jobId={jobId}/>
       </div>
