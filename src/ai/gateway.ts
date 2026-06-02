@@ -160,12 +160,16 @@ export async function generateWithAI(
           },
           "All AI providers failed"
         );
+        
+        // Build helpful error message
+        const errorDetails = [
+          `Primary (${primaryConfig.provider}): ${primaryError instanceof Error ? primaryError.message : String(primaryError)}`,
+          `Fallback (${fallbackConfig.provider}): ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
+          `OpenRouter: ${openRouterError instanceof Error ? openRouterError.message : String(openRouterError)}`
+        ];
+        
         throw new Error(
-          `All AI providers failed for stage ${stage}. Last error: ${
-            openRouterError instanceof Error
-              ? openRouterError.message
-              : String(openRouterError)
-          }`
+          `All AI providers failed for stage ${stage}.\n${errorDetails.join('\n')}\n\nPlease check that your API keys are properly configured in Vercel environment variables.`
         );
       }
     }
