@@ -92,61 +92,59 @@ export function buildAppSpecPrompt(
   intent: AppIntent
 ): string {
   const registry = getIntegrationRegistry();
-  const registeredIntegrations = registry.map((i) => ({
-    id: i.id,
-    displayName: i.displayName,
-    actions: i.actions.map((a) => ({
-      id: a.id,
-      name: a.name,
-      description: a.description,
-    })),
-  }));
 
-  const requestedIntegrations = intent.integrations_requested
+  // Only include integrations that were actually requested — keeps prompt small
+  const requestedIds = intent.integrations_requested
     .map((name) => {
       const found = registry.find(
         (r) =>
           r.id.toLowerCase() === name.toLowerCase() ||
           r.displayName.toLowerCase().includes(name.toLowerCase())
       );
-      return found ? { requested: name, matched: found.id } : null;
+      return found ? found.id : null;
     })
-    .filter(Boolean);
+    .filter((id): id is string => id !== null);
 
-  // Build a compact action ID reference — model reads IDs when they are the only option presented
-  const actionIdReference = registeredIntegrations
-    .map((i) => `  ${i.id}: [${i.actions.map((a) => a.id).join(", ")}]`)
+  // Compact action ID list for requested integrations only
+  const actionRef = requestedIds
+    .map((id) => {
+      const intg = registry.find((r) => r.id === id);
+      if (!intg) return null;
+      return `${id}: [${intg.actions.map((a) => a.id).join(", ")}]`;
+    })
+    .filter(Boolean)
     .join("\n");
 
-  return `Convert this DataSchema into a complete AppSpec.
+  // Compact entity list — name + field names only (no full field objects)
+  const entitySummary = schema.entities
+    .map((e) => `${e.name}: [${e.fields.map((f) => f.name).join(", ")}]`)
+    .join("\n");
 
-App Details:
-- Name: ${intent.appName}
-- Type: ${intent.appType}
-- Features: ${intent.features.join(", ")}
-- Requested integrations: ${intent.integrations_requested.join(", ") || "none"}
+  const entityNames = schema.entities.map((e) => e.name).join(", ");
+  const integrationIds = requestedIds.length > 0
+    ? requestedIds.join(", ")
+    : registry.slice(0, 5).map((r) => r.id).join(", ");
 
-DataSchema (use ONLY these entity names):
-${JSON.stringify(schema, null, 2)}
+  return `Convert this schema into an AppSpec JSON.
 
-VALID INTEGRATION IDs (use ONLY these exact IDs in integration and integrationId fields):
-${registry.map((r) => r.id).join(", ")}
+App: ${intent.appName} (${intent.appType})
+Features: ${intent.features.slice(0, 5).join(", ")}
+Integrations needed: ${intent.integrations_requested.join(", ") || "none"}
 
-VALID ACTION IDs per integration (use ONLY these exact action IDs in workflowStubs.action):
-${actionIdReference}
+Entities (use ONLY these exact names as boundEntity):
+${entitySummary}
 
-Integration matches for requested integrations:
-${JSON.stringify(requestedIntegrations, null, 2)}
+Valid integration IDs: ${integrationIds}
+Valid action IDs per integration:
+${actionRef || "none"}
 
-Requirements:
-1. Create pages for each entity (at minimum a list view)
-2. Create CRUD API endpoints for each entity
-3. Add a dashboard page if analytics is a feature
-4. For each requested integration, create at least one workflowStub using the matched integration ID
-5. Auth roles: admin (full access), user (read+write), and any domain-specific roles
-6. Every workflowStub.integration MUST be exactly one of: ${registry.map((r) => r.id).join(", ")}
-7. boundEntity values MUST be exactly one of: ${schema.entities.map((e) => e.name).join(", ")}
-8. workflowStub.action MUST be one of the action IDs listed above for the chosen integration
+Rules:
+1. For each entity: 1 list page (route: /entityname), GET+POST+PUT+DELETE endpoints
+2. boundEntity MUST be one of: ${entityNames}
+3. workflowStub.integration MUST be one of: ${integrationIds}
+4. workflowStub.action MUST be from the action IDs listed above
+5. authRules: include admin (read+write+delete) and user (read+write) roles
+6. Add 1 workflowStub per requested integration
 
-Return the AppSpec JSON now.`;
+Return ONLY the AppSpec JSON. No markdown, no explanations.`;
 }

@@ -43,15 +43,23 @@ Critical rules:
 8. Return JSON only. No explanations.`;
 
 export function buildSchemaPrompt(intent: AppIntent): string {
-  return `Convert this AppIntent into a complete DataSchema:
+  // Compact intent (no pretty-print) to save tokens
+  const compactIntent = JSON.stringify({
+    appName: intent.appName,
+    appType: intent.appType,
+    entities: intent.entities,
+    features: intent.features.slice(0, 6),
+    integrations_requested: intent.integrations_requested,
+  });
 
-AppIntent:
-${JSON.stringify(intent, null, 2)}
+  return `Convert this AppIntent into a DataSchema JSON.
 
-Requirements:
-- Generate all entities listed: ${intent.entities.join(", ")}
-- Infer relationships between entities based on the app type (${intent.appType}) and features
-- Every entity needs: id (uuid primary), tenantId (uuid), createdAt, updatedAt
+AppIntent: ${compactIntent}
+
+Rules:
+- Generate entities: ${intent.entities.join(", ")}
+- Every entity needs: id (uuid, isPrimary:true), tenantId (uuid), createdAt (datetime), updatedAt (datetime)
+- Add relevant fields per entity based on context
 - Make relations bidirectionally consistent
-- Return the DataSchema JSON now.`;
+- Return ONLY the JSON object, no explanations.`;
 }

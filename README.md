@@ -132,8 +132,8 @@ Config-driven routing in `src/ai/routing.config.ts`:
 | Stage | Primary | Fallback |
 |---|---|---|
 | intent_extraction | groq / llama-3.1-8b-instant | openai / gpt-4o-mini |
-| schema_generation | openai / gpt-4o-mini | anthropic / claude-3-5-haiku |
-| appspec_generation | openai / gpt-4o-mini | anthropic / claude-3-5-haiku |
+| schema_generation | groq / llama-3.3-70b-versatile | groq / llama-3.1-8b-instant |
+| appspec_generation | groq / llama-3.3-70b-versatile | groq / llama-3.1-8b-instant |
 | repair | openai / gpt-4o-mini | groq / llama-3.1-8b-instant |
 
 On 429 or 5xx → automatic OpenRouter fallback with equivalent model.
