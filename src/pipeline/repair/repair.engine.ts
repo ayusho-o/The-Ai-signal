@@ -193,8 +193,9 @@ export function fieldRepairAppSpec(
     };
   }
 
-  // Ensure pages have layout
+  // Ensure pages have layout and boundEntity
   const pages = obj["pages"] as Array<Record<string, unknown>>;
+  const firstEntity = dataSchema?.entities[0]?.name ?? "Entity";
   for (const page of pages) {
     if (!page["layout"]) page["layout"] = "list";
     if (!page["components"] || !Array.isArray(page["components"])) {
@@ -203,14 +204,22 @@ export function fieldRepairAppSpec(
     if (!page["route"] && page["name"]) {
       page["route"] = `/${String(page["name"]).toLowerCase().replace(/\s+/g, "-")}`;
     }
+    // Fix null or missing boundEntity
+    if (!page["boundEntity"] || page["boundEntity"] === null) {
+      page["boundEntity"] = firstEntity;
+    }
   }
 
-  // Ensure endpoints have required fields
+  // Ensure endpoints have required fields and boundEntity
   const endpoints = obj["apiEndpoints"] as Array<Record<string, unknown>>;
   for (const ep of endpoints) {
     if (typeof ep["authRequired"] !== "boolean") ep["authRequired"] = true;
     if (typeof ep["rateLimitFlag"] !== "boolean") ep["rateLimitFlag"] = false;
     if (!ep["method"]) ep["method"] = "GET";
+    // Fix null or missing boundEntity
+    if (!ep["boundEntity"] || ep["boundEntity"] === null) {
+      ep["boundEntity"] = firstEntity;
+    }
   }
 
   return JSON.stringify(obj);
@@ -236,7 +245,10 @@ export function consistencyRepairAppSpec(
   const pages = (obj["pages"] as Array<Record<string, unknown>>) ?? [];
   const firstEntity = dataSchema.entities[0]?.name ?? "Entity";
   for (const page of pages) {
-    if (typeof page["boundEntity"] === "string" && !entityNames.has(page["boundEntity"])) {
+    // Handle null, undefined, or missing boundEntity
+    if (!page["boundEntity"] || page["boundEntity"] === null) {
+      page["boundEntity"] = firstEntity;
+    } else if (typeof page["boundEntity"] === "string" && !entityNames.has(page["boundEntity"])) {
       // Find closest match
       const closest = findClosestEntity(page["boundEntity"] as string, [...entityNames]);
       page["boundEntity"] = closest ?? firstEntity;
@@ -246,7 +258,10 @@ export function consistencyRepairAppSpec(
   // Fix broken endpoint boundEntity references
   const endpoints = (obj["apiEndpoints"] as Array<Record<string, unknown>>) ?? [];
   for (const ep of endpoints) {
-    if (typeof ep["boundEntity"] === "string" && !entityNames.has(ep["boundEntity"])) {
+    // Handle null, undefined, or missing boundEntity
+    if (!ep["boundEntity"] || ep["boundEntity"] === null) {
+      ep["boundEntity"] = firstEntity;
+    } else if (typeof ep["boundEntity"] === "string" && !entityNames.has(ep["boundEntity"])) {
       const closest = findClosestEntity(ep["boundEntity"] as string, [...entityNames]);
       ep["boundEntity"] = closest ?? firstEntity;
     }
