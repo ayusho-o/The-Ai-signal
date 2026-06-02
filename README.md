@@ -83,13 +83,13 @@ User Prompt
 ### Stage 2 — Schema Generation
 - **Input:** AppIntent
 - **Output:** `DataSchema` — entities with fields, relations, tenantId enforcement
-- **Model:** Gemini 1.5 Flash (primary) → Groq Llama 3 (fallback)
+- **Model:** OpenAI gpt-4o-mini (primary) → Anthropic claude-3-5-haiku (fallback)
 - **Validation:** tenantId presence, bidirectional relation consistency, snake_case tableName
 
 ### Stage 3 — AppSpec Generation
 - **Input:** DataSchema + AppIntent
 - **Output:** `AppSpec` — pages, API endpoints, auth roles, integrationHooks, workflowStubs
-- **Model:** Gemini 1.5 Flash (primary) → Groq Llama 3 (fallback)
+- **Model:** OpenAI gpt-4o-mini (primary) → Anthropic claude-3-5-haiku (fallback)
 - **Validation:** page↔API consistency, entity reference resolution, integration registry validation
 
 ---
@@ -132,8 +132,8 @@ Config-driven routing in `src/ai/routing.config.ts`:
 | Stage | Primary | Fallback |
 |---|---|---|
 | intent_extraction | groq / llama-3.1-8b-instant | openai / gpt-4o-mini |
-| schema_generation | gemini / gemini-1.5-flash | groq / llama-3.1-8b-instant |
-| appspec_generation | gemini / gemini-1.5-flash | groq / llama-3.1-8b-instant |
+| schema_generation | openai / gpt-4o-mini | anthropic / claude-3-5-haiku |
+| appspec_generation | openai / gpt-4o-mini | anthropic / claude-3-5-haiku |
 | repair | openai / gpt-4o-mini | groq / llama-3.1-8b-instant |
 
 On 429 or 5xx → automatic OpenRouter fallback with equivalent model.

@@ -73,14 +73,14 @@ export const ROUTING_CONFIG: Record<PipelineStage | "repair", StageRouting> = {
 
   schema_generation: {
     primary: {
-      provider: "gemini",
-      model: "gemini-1.5-flash",
+      provider: "openai",
+      model: "gpt-4o-mini",
       maxTokens: 4000,
       temperature: 0.2,
     },
     fallback: {
-      provider: "groq",
-      model: "llama-3.1-8b-instant",
+      provider: "anthropic",
+      model: "claude-3-5-haiku-20241022",
       maxTokens: 4000,
       temperature: 0.1,
     },
@@ -88,14 +88,14 @@ export const ROUTING_CONFIG: Record<PipelineStage | "repair", StageRouting> = {
 
   appspec_generation: {
     primary: {
-      provider: "gemini",
-      model: "gemini-1.5-flash",
+      provider: "openai",
+      model: "gpt-4o-mini",
       maxTokens: 6000,
       temperature: 0.2,
     },
     fallback: {
-      provider: "groq",
-      model: "llama-3.1-8b-instant",
+      provider: "anthropic",
+      model: "claude-3-5-haiku-20241022",
       maxTokens: 6000,
       temperature: 0.1,
     },
