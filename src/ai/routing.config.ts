@@ -73,14 +73,14 @@ export const ROUTING_CONFIG: Record<PipelineStage | "repair", StageRouting> = {
 
   schema_generation: {
     primary: {
-      provider: "openai",
-      model: "gpt-4o",
+      provider: "groq",
+      model: "llama-3.3-70b-versatile",
       maxTokens: 4000,
       temperature: 0.2,
     },
     fallback: {
-      provider: "anthropic",
-      model: "claude-3-5-sonnet-20241022",
+      provider: "gemini",
+      model: "gemini-1.5-pro",
       maxTokens: 4000,
       temperature: 0.2,
     },
@@ -88,14 +88,14 @@ export const ROUTING_CONFIG: Record<PipelineStage | "repair", StageRouting> = {
 
   appspec_generation: {
     primary: {
-      provider: "anthropic",
-      model: "claude-3-5-sonnet-20241022",
+      provider: "groq",
+      model: "llama-3.3-70b-versatile",
       maxTokens: 6000,
       temperature: 0.2,
     },
     fallback: {
-      provider: "openai",
-      model: "gpt-4o",
+      provider: "gemini",
+      model: "gemini-1.5-pro",
       maxTokens: 6000,
       temperature: 0.2,
     },
