@@ -113,7 +113,22 @@ export function fieldRepairSchema(
   for (const entity of entities) {
     if (!entity || typeof entity !== "object") continue;
 
-    const fields = (entity["fields"] as Array<Record<string, unknown>>) ?? [];
+    // Ensure fields is an array
+    if (!Array.isArray(entity["fields"])) {
+      entity["fields"] = [];
+    }
+    
+    const fields = entity["fields"] as Array<Record<string, unknown>>;
+
+    // Fix all field properties
+    for (const field of fields) {
+      if (!field["name"]) field["name"] = "field";
+      if (!field["type"]) field["type"] = "string";
+      if (field["nullable"] === undefined || field["nullable"] === null) field["nullable"] = true;
+      if (field["isRelation"] === undefined || field["isRelation"] === null) field["isRelation"] = false;
+      if (field["isPrimary"] === undefined || field["isPrimary"] === null) field["isPrimary"] = false;
+      if (field["isUnique"] === undefined || field["isUnique"] === null) field["isUnique"] = false;
+    }
 
     // Add missing tenantId
     const hasTenantId = fields.some((f) => f["name"] === "tenantId");
@@ -137,15 +152,6 @@ export function fieldRepairSchema(
     // Ensure relations array exists
     if (!Array.isArray(entity["relations"])) {
       entity["relations"] = [];
-    }
-
-    // Fix field types
-    for (const field of fields) {
-      if (!field["type"]) field["type"] = "string";
-      if (typeof field["nullable"] !== "boolean") field["nullable"] = true;
-      if (typeof field["isRelation"] !== "boolean") field["isRelation"] = false;
-      if (typeof field["isPrimary"] !== "boolean") field["isPrimary"] = false;
-      if (typeof field["isUnique"] !== "boolean") field["isUnique"] = false;
     }
   }
 
