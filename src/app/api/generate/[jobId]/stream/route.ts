@@ -6,6 +6,7 @@ import {
   getJob,
 } from "@/lib/job-store";
 import type { SSEEvent } from "@/types";
+import { logger } from "@/lib/logger";
 
 interface RouteContext {
   params: Promise<{ jobId: string }>;
@@ -49,16 +50,16 @@ export async function GET(req: NextRequest, context: RouteContext) {
             event.type === "generation_complete" ||
             event.type === "generation_failed"
           ) {
-            // Send a final heartbeat then close
             setTimeout(() => {
               try {
                 controller.close();
-              } catch {
-                // already closed
+              } catch (closeErr) {
+                logger.debug({ error: closeErr }, "SSE stream already closed on terminal event");
               }
             }, 100);
           }
-        } catch {
+        } catch (enqueueErr) {
+          logger.warn({ jobId, error: enqueueErr }, "SSE enqueue failed — removing dead subscriber");
           unsubscribe();
         }
       });
@@ -68,8 +69,8 @@ export async function GET(req: NextRequest, context: RouteContext) {
         unsubscribe();
         try {
           controller.close();
-        } catch {
-          // already closed
+        } catch (closeErr) {
+          logger.debug({ jobId, error: closeErr }, "SSE stream already closed on client disconnect");
         }
       });
 
@@ -88,7 +89,8 @@ export async function GET(req: NextRequest, context: RouteContext) {
               })
             )
           );
-        } catch {
+        } catch (heartbeatErr) {
+          logger.debug({ jobId, error: heartbeatErr }, "SSE heartbeat failed — clearing interval");
           clearInterval(heartbeat);
         }
       }, 15000);

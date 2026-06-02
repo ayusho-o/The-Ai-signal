@@ -30,6 +30,7 @@ export async function GET() {
       isValid: validation.isValid,
       missing: validation.missing,
       configured: validation.configured,
+      ...(validation.warning ? { warning: validation.warning } : {}),
     },
     configuredProviders: providers,
     apiKeysPreview: envCheck,

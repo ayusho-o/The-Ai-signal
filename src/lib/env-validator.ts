@@ -1,24 +1,31 @@
 // Environment Variable Validator
-// Validates that required API keys are configured
+// Validates that at least one AI provider key is configured.
+// The pipeline routes across providers — only one is needed to run.
 
 export interface EnvValidation {
   isValid: boolean;
   missing: string[];
   configured: string[];
+  warning?: string;
 }
 
-const REQUIRED_KEYS = [
+// At least one of these must be set for the pipeline to run
+const PROVIDER_KEYS = [
   "OPENAI_API_KEY",
   "ANTHROPIC_API_KEY",
   "GROQ_API_KEY",
-] as const;
-
-const OPTIONAL_KEYS = [
   "GEMINI_API_KEY",
   "GOOGLE_AI_API_KEY",
   "DEEPSEEK_API_KEY",
   "OPENROUTER_API_KEY",
   "MISTRAL_API_KEY",
+] as const;
+
+// These are the keys used by the default routing config — recommended but not strictly required
+const RECOMMENDED_KEYS = [
+  "GROQ_API_KEY",      // Stage 1 primary
+  "GEMINI_API_KEY",    // Stage 2+3 primary
+  "OPENAI_API_KEY",    // Stage 1 fallback + repair
 ] as const;
 
 function isKeyConfigured(key: string): boolean {
@@ -30,30 +37,29 @@ function isKeyConfigured(key: string): boolean {
 }
 
 export function validateEnvironment(): EnvValidation {
-  const missing: string[] = [];
   const configured: string[] = [];
+  const missing: string[] = [];
 
-  // Check required keys
-  for (const key of REQUIRED_KEYS) {
-    if (isKeyConfigured(key)) {
-      configured.push(key);
-    } else {
-      missing.push(key);
-    }
-  }
-
-  // Check optional keys
-  for (const key of OPTIONAL_KEYS) {
+  for (const key of PROVIDER_KEYS) {
     if (isKeyConfigured(key)) {
       configured.push(key);
     }
   }
 
-  return {
-    isValid: missing.length === 0,
-    missing,
-    configured,
-  };
+  // Check which recommended keys are missing (for warnings only)
+  const missingRecommended = RECOMMENDED_KEYS.filter(k => !isKeyConfigured(k));
+  for (const key of missingRecommended) {
+    missing.push(key);
+  }
+
+  // Valid as long as at least one provider is configured
+  const isValid = configured.length > 0;
+
+  const warning = missingRecommended.length > 0
+    ? `Recommended keys not set: ${missingRecommended.join(", ")}. Default routing may fall back to OpenRouter.`
+    : undefined;
+
+  return { isValid, missing, configured, warning };
 }
 
 export function getConfiguredProviders(): string[] {
