@@ -413,7 +413,6 @@ export async function attemptRepair(
     (e) =>
       e.code === "MISSING_FIELD" ||
       e.code === "WRONG_TYPE" ||
-      e.code === "INVALID_TYPE" ||
       e.code === "INVALID_ENUM" ||
       e.code === "MISSING_TENANT_ID" ||
       e.message?.includes("Expected") ||
