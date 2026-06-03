@@ -15,7 +15,8 @@ out/
 
 # Logs
 *.log
-eval-results/
+# eval-results kept in repo for submission — only ignore auto-generated log files
+eval-results/*.log
 
 # OS
 .DS_Store
