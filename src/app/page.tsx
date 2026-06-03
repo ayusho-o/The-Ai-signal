@@ -307,30 +307,57 @@ function PromptPanel({ onSubmit, isRunning, jobId }: { onSubmit: (p: string) => 
 // ─── StageTracker ──────────────────────────────────────────────────────────────
 const STAGES = [
   {id:"intent_extraction",label:"Intent Extraction",desc:"Prompt → AppIntent (Groq llama-3.1-8b)"},
-  {id:"schema_generation",label:"Schema Generation",desc:"AppIntent → DataSchema (Gemini 1.5 Flash)"},
-  {id:"appspec_generation",label:"AppSpec Generation",desc:"DataSchema → AppSpec (Gemini 1.5 Flash)"},
+  {id:"schema_generation",label:"Schema Generation",desc:"AppIntent → DataSchema"},
+  {id:"appspec_generation",label:"AppSpec Generation",desc:"DataSchema → AppSpec"},
 ];
+
+const REPAIR_ICONS: Record<string,string> = {
+  STRUCTURAL_REPAIR:"🔧", FIELD_REPAIR:"🔩", CONSISTENCY_REPAIR:"🔗",
+  AI_RETRY:"🤖", ESCALATED_AI_RETRY:"⚡",
+};
+
 function StageTracker({ events, job, isRunning }: { events: any[]; job: any; isRunning: boolean }) {
   const ss = (id: string) => {
-    const s = events.filter(e=>e.stage===id);
+    const s = events.filter((e:any)=>e.stage===id);
     if (s.some((e:any)=>e.type==="stage_failed")) return "failed";
     if (s.some((e:any)=>e.type==="stage_complete")) return "completed";
     if (s.some((e:any)=>e.type==="stage_start")) return "running";
     return "pending";
   };
-  const sm = (id: string) => events.find(e=>e.stage===id&&e.type==="stage_complete")?.metrics || null;
-  const sr = (id: string) => events.find(e=>e.stage===id&&e.type==="stage_complete")?.repairLog || [];
+  const sm = (id: string) => {
+    const fromEvent = events.find((e:any)=>e.stage===id&&e.type==="stage_complete")?.metrics;
+    if (fromEvent) return fromEvent;
+    const fromJob = job?.stageMetrics?.[id];
+    if (fromJob && fromJob.status !== "pending" && fromJob.status !== "running") return fromJob;
+    return null;
+  };
+  const sr = (id: string): any[] => {
+    const fromEvent = events.find((e:any)=>e.stage===id&&e.type==="stage_complete")?.repairLog;
+    if (fromEvent) return fromEvent;
+    return job?.stageMetrics?.[id]?.repairAttempts ?? [];
+  };
   const isComplete = job?.status==="completed";
   const isFailed = job?.status==="failed";
-  const intentData = events.find(e=>e.stage==="intent_extraction"&&e.type==="stage_complete")?.data;
+  const isDegraded = events.some((e:any)=>e.type==="generation_complete"&&e.data?.degraded===true);
+  const intentData = events.find((e:any)=>e.stage==="intent_extraction"&&e.type==="stage_complete")?.data ?? job?.intent;
   const clarification = intentData?.clarification_required;
+
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16,maxWidth:760}}>
       <div style={{display:"flex",alignItems:"center",gap:12}}>
         <Mono>Pipeline Status:</Mono>
         <Badge status={isRunning?"running":isComplete?"completed":isFailed?"failed":"pending"}/>
+        {isDegraded && <span style={{fontSize:10,fontFamily:"monospace",padding:"2px 8px",borderRadius:4,background:"rgba(245,158,11,.15)",color:C.warning,border:"1px solid rgba(245,158,11,.3)"}}>DEGRADED MODE</span>}
         {job && <div style={{marginLeft:"auto",fontSize:11,fontFamily:"monospace",color:C.textDim}}>{job.totalLatencyMs>0&&`${(job.totalLatencyMs/1000).toFixed(1)}s`}{job.totalCostUsd>0&&` · $${job.totalCostUsd.toFixed(5)}`}</div>}
       </div>
+
+      {isDegraded && (
+        <div style={{background:"rgba(245,158,11,.08)",border:`1px solid rgba(245,158,11,.3)`,borderRadius:8,padding:14}}>
+          <div style={{fontSize:12,fontFamily:"monospace",fontWeight:600,color:C.warning,marginBottom:4}}>⚡ Running in degraded mode</div>
+          <div style={{fontSize:11,fontFamily:"monospace",color:C.textDim}}>AI providers were unavailable. A deterministic fallback spec was generated from your prompt using template logic. All entities, pages, endpoints, and auth rules are structurally valid.</div>
+        </div>
+      )}
+
       {clarification && (
         <div style={{background:"rgba(99,102,241,.08)",border:`1px solid rgba(99,102,241,.3)`,borderRadius:8,padding:14}}>
           <div style={{fontSize:12,fontFamily:"monospace",fontWeight:600,color:C.accent,marginBottom:6}}>⚠ Clarification Required</div>
@@ -338,10 +365,12 @@ function StageTracker({ events, job, isRunning }: { events: any[]; job: any; isR
           <div style={{fontSize:11,fontFamily:"monospace",color:C.textDim,marginTop:6}}>Pipeline continued with minimal spec. No crash.</div>
         </div>
       )}
+
       {STAGES.map(stage => {
         const status = ss(stage.id);
         const m = sm(stage.id);
-        const repairs = sr(stage.id);
+        const repairs: any[] = sr(stage.id);
+        const repairedCount = repairs.filter((r:any)=>r.outcome==="REPAIRED").length;
         const bc = status==="completed"?"rgba(34,197,94,.3)":status==="failed"?"rgba(239,68,68,.3)":status==="running"?"rgba(245,158,11,.3)":C.border;
         const bg = status==="completed"?"rgba(34,197,94,.03)":status==="failed"?"rgba(239,68,68,.03)":status==="running"?"rgba(245,158,11,.03)":C.surface;
         return (
@@ -351,30 +380,43 @@ function StageTracker({ events, job, isRunning }: { events: any[]; job: any; isR
                 <div style={{fontSize:13,fontFamily:"monospace",fontWeight:600,color:C.text}}>{stage.label}</div>
                 <div style={{fontSize:11,fontFamily:"monospace",color:C.textDim,marginTop:2}}>{stage.desc}</div>
               </div>
-              <Badge status={status}/>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                {repairedCount>0 && <span style={{fontSize:10,fontFamily:"monospace",padding:"2px 6px",borderRadius:3,background:"rgba(34,197,94,.15)",color:C.success}}>🔧 {repairedCount} repair{repairedCount>1?"s":""}</span>}
+                <Badge status={status}/>
+              </div>
             </div>
             {m && <div style={{marginTop:10,display:"flex",gap:16,flexWrap:"wrap",fontSize:11,fontFamily:"monospace",color:C.textDim}}>
-              {m.latencyMs&&<span>{(m.latencyMs/1000).toFixed(2)}s</span>}
-              {m.tokensUsed&&<span>{m.tokensUsed.toLocaleString()} tokens</span>}
-              {m.estimatedCostUsd&&<span>${m.estimatedCostUsd.toFixed(5)}</span>}
-              {m.providerUsed&&<span style={{color:C.accent}}>{m.providerUsed}/{m.modelUsed?.split("-").slice(0,3).join("-")}</span>}
+              {m.latencyMs>0&&<span>⏱ {(m.latencyMs/1000).toFixed(2)}s</span>}
+              {m.tokensUsed>0&&<span>🔤 {m.tokensUsed.toLocaleString()} tokens</span>}
+              {m.estimatedCostUsd>0&&<span>💰 ${m.estimatedCostUsd.toFixed(5)}</span>}
+              {m.providerUsed&&<span style={{color:C.accent}}>🚀 {m.providerUsed}/{m.modelUsed?.split("-").slice(0,3).join("-")}</span>}
             </div>}
-            {repairs.length>0 && <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:4}}>
-              <Mono>Repair log:</Mono>
-              {repairs.map((r: any,i: number) => (
-                <div key={i} style={{fontSize:11,fontFamily:"monospace",padding:"4px 10px",borderRadius:4,marginTop:2,border:`1px solid ${r.outcome==="REPAIRED"?"rgba(34,197,94,.2)":r.outcome==="ESCALATED"?"rgba(245,158,11,.2)":"rgba(239,68,68,.2)"}`,background:r.outcome==="REPAIRED"?"rgba(34,197,94,.05)":r.outcome==="ESCALATED"?"rgba(245,158,11,.05)":"rgba(239,68,68,.05)",color:r.outcome==="REPAIRED"?C.success:r.outcome==="ESCALATED"?C.warning:C.error}}>
-                  <span style={{color:C.textDim}}>[{r.strategy}]</span> {r.outcome}{r.detail&&<span style={{color:C.textDim}}> — {r.detail}</span>}
-                </div>
-              ))}
-            </div>}
+            {repairs.length>0 && (
+              <div style={{marginTop:12,display:"flex",flexDirection:"column",gap:4}}>
+                <div style={{fontSize:11,fontFamily:"monospace",color:C.textDim,marginBottom:2}}>Repair engine log:</div>
+                {repairs.map((r:any,i:number) => (
+                  <div key={i} style={{fontSize:11,fontFamily:"monospace",padding:"6px 10px",borderRadius:4,border:`1px solid ${r.outcome==="REPAIRED"?"rgba(34,197,94,.3)":r.outcome==="ESCALATED"?"rgba(245,158,11,.3)":"rgba(239,68,68,.3)"}`,background:r.outcome==="REPAIRED"?"rgba(34,197,94,.07)":r.outcome==="ESCALATED"?"rgba(245,158,11,.07)":"rgba(239,68,68,.07)"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:14}}>{REPAIR_ICONS[r.strategy]??""}</span>
+                      <span style={{fontWeight:600,color:r.outcome==="REPAIRED"?C.success:r.outcome==="ESCALATED"?C.warning:C.error}}>{r.strategy}</span>
+                      <span style={{padding:"1px 5px",borderRadius:3,fontSize:10,background:r.outcome==="REPAIRED"?"rgba(34,197,94,.2)":r.outcome==="ESCALATED"?"rgba(245,158,11,.2)":"rgba(239,68,68,.2)",color:r.outcome==="REPAIRED"?C.success:r.outcome==="ESCALATED"?C.warning:C.error}}>
+                        {r.outcome}
+                      </span>
+                    </div>
+                    {r.detail && <div style={{fontSize:10,fontFamily:"monospace",color:C.textDim,marginTop:3,paddingLeft:22}}>{r.detail}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         );
       })}
-      {events.filter(e=>e.type!=="heartbeat").length>0 && (
+
+      {events.filter((e:any)=>e.type!=="heartbeat").length>0 && (
         <div style={{marginTop:4}}>
-          <div style={{fontFamily:"monospace",fontSize:11,color:C.textDim,marginBottom:8,display:"block"}}>Event log ({events.filter(e=>e.type!=="heartbeat").length}):</div>
+          <div style={{fontFamily:"monospace",fontSize:11,color:C.textDim,marginBottom:8}}>Event log ({events.filter((e:any)=>e.type!=="heartbeat").length}):</div>
           <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:12,maxHeight:180,overflowY:"auto",display:"flex",flexDirection:"column",gap:3}}>
-            {events.filter(e=>e.type!=="heartbeat").map((e: any,i: number) => (
+            {events.filter((e:any)=>e.type!=="heartbeat").map((e:any,i:number) => (
               <div key={i} style={{display:"flex",gap:12,fontSize:11,fontFamily:"monospace"}}>
                 <span style={{color:C.textDim,flexShrink:0}}>{new Date(e.timestamp).toLocaleTimeString()}</span>
                 <span style={{color:e.type.includes("failed")?C.error:e.type.includes("complete")?C.success:e.type==="stage_start"?C.warning:C.textDim}}>
@@ -393,8 +435,9 @@ function StageTracker({ events, job, isRunning }: { events: any[]; job: any; isR
 // ─── AppSpecRenderer ───────────────────────────────────────────────────────────
 function AppSpecRenderer({ job, events }: { job: any; events: any[] }) {
   const methodColors: Record<string,string> = {GET:C.success,POST:C.accent,PUT:C.warning,PATCH:"#facc15",DELETE:C.error};
-  const intentData = events.find(e=>e.stage==="intent_extraction"&&e.type==="stage_complete")?.data;
-  const schemaData = events.find(e=>e.stage==="schema_generation"&&e.type==="stage_complete")?.data;
+  const intentData = events.find((e:any)=>e.stage==="intent_extraction"&&e.type==="stage_complete")?.data ?? job?.intent;
+  const schemaData = events.find((e:any)=>e.stage==="schema_generation"&&e.type==="stage_complete")?.data ?? job?.schema;
+  const isDegraded = events.some((e:any)=>e.type==="generation_complete"&&e.data?.degraded===true);
   if (!job) return <div style={{textAlign:"center",padding:"60px 0",color:C.textDim,fontFamily:"monospace",fontSize:13}}>No generation in progress. Submit a prompt to generate an AppSpec.</div>;
   if (job.status==="running") return <div style={{textAlign:"center",padding:"60px 0",color:C.textDim,fontFamily:"monospace",fontSize:13}}><div style={{width:8,height:8,borderRadius:"50%",background:C.warning,margin:"0 auto 12px",animation:"pulseDot 1s ease-in-out infinite"}}/>Pipeline running…</div>;
   if (!job.appSpec) return <div style={{textAlign:"center",padding:"60px 0",color:C.textDim,fontFamily:"monospace",fontSize:13}}>AppSpec not yet generated.</div>;
@@ -402,6 +445,11 @@ function AppSpecRenderer({ job, events }: { job: any; events: any[] }) {
   const displaySchema = schema || schemaData;
   return (
     <div style={{display:"flex",flexDirection:"column",gap:28,maxWidth:1000}}>
+      {isDegraded && (
+        <div style={{background:"rgba(245,158,11,.08)",border:`1px solid rgba(245,158,11,.3)`,borderRadius:8,padding:12,fontSize:11,fontFamily:"monospace",color:C.warning}}>
+          ⚡ <strong>Degraded mode</strong> — AI providers unavailable. This AppSpec was generated deterministically from your prompt using template logic. It is structurally valid and complete.
+        </div>
+      )}
       <div style={{display:"flex",alignItems:"center",gap:16}}>
         <div>
           <div style={{fontSize:18,fontFamily:"monospace",fontWeight:700,color:C.text}}>{appSpec.appName}</div>

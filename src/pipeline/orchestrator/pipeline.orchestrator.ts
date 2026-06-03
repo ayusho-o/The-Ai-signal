@@ -10,6 +10,10 @@ import {
 import { runIntentStage } from "../stages/intent.stage";
 import { runSchemaStage } from "../stages/schema.stage";
 import { runAppSpecStage } from "../stages/appspec.stage";
+import {
+  generateDeterministicSchema,
+  generateDeterministicAppSpec,
+} from "../fallback/deterministic.generator";
 import { logger } from "@/lib/logger";
 
 // ============================================================
@@ -75,23 +79,51 @@ async function runPipelineAsync(
     });
 
     if (!intentResult.intent) {
+      // Degraded mode: intent extraction failed — use minimal fallback intent
+      log.warn("Intent extraction failed — entering degraded mode with fallback intent");
+      const fallbackIntent = {
+        appName: "Generated App",
+        appType: "custom" as const,
+        features: ["CRUD operations", "User management"],
+        entities: ["Item", "User"],
+        integrations_requested: [] as string[],
+        assumptions: [
+          "Degraded mode: AI providers unavailable — minimal spec generated from template",
+          "Prompt was: " + prompt.slice(0, 100),
+        ],
+      };
+      updateJob(jobId, { intent: fallbackIntent });
       emit({
-        type: "stage_failed",
+        type: "stage_complete",
         stage: "intent_extraction",
         timestamp: new Date().toISOString(),
-        error: intentResult.error,
+        data: fallbackIntent,
         repairLog: intentResult.repairAttempts,
       });
-      updateJob(jobId, {
-        status: "failed",
-        error: intentResult.error,
-        totalLatencyMs: Date.now() - pipelineStart,
-      });
+      // Emit degraded mode notice
       emit({
-        type: "generation_failed",
+        type: "stage_start",
+        stage: "schema_generation",
         timestamp: new Date().toISOString(),
-        error: intentResult.error,
+        data: { message: "Running in degraded mode — using deterministic fallback generation" },
       });
+      const fallbackSchema = generateDeterministicSchema(fallbackIntent);
+      const fallbackSpec = generateDeterministicAppSpec(fallbackSchema, fallbackIntent);
+      const totalLatency = Date.now() - pipelineStart;
+      updateJob(jobId, {
+        schema: fallbackSchema,
+        appSpec: fallbackSpec,
+        status: "completed",
+        totalLatencyMs: totalLatency,
+        stageMetrics: {
+          ...getJob(jobId)!.stageMetrics,
+          schema_generation: { stage: "schema_generation", status: "completed", repairAttempts: [], latencyMs: 0 },
+          appspec_generation: { stage: "appspec_generation", status: "completed", repairAttempts: [], latencyMs: 0 },
+        },
+      });
+      emit({ type: "stage_complete", stage: "schema_generation", timestamp: new Date().toISOString(), data: fallbackSchema });
+      emit({ type: "stage_complete", stage: "appspec_generation", timestamp: new Date().toISOString(), data: fallbackSpec });
+      emit({ type: "generation_complete", timestamp: new Date().toISOString(), data: { appSpec: fallbackSpec, totalCostUsd: 0, totalLatencyMs: totalLatency, degraded: true } });
       return;
     }
 
@@ -143,23 +175,31 @@ async function runPipelineAsync(
     });
 
     if (!schemaResult.schema) {
+      // Degraded mode: schema generation failed — generate deterministic schema
+      log.warn("Schema generation failed — entering degraded mode with deterministic schema");
+      const fallbackSchema = generateDeterministicSchema(intentResult.intent);
+      updateJob(jobId, { schema: fallbackSchema });
       emit({
-        type: "stage_failed",
+        type: "stage_complete",
         stage: "schema_generation",
         timestamp: new Date().toISOString(),
-        error: schemaResult.error,
+        data: fallbackSchema,
         repairLog: schemaResult.repairAttempts,
       });
+      // Short-circuit to deterministic appspec too
+      const fallbackSpec = generateDeterministicAppSpec(fallbackSchema, intentResult.intent);
+      const totalLatency = Date.now() - pipelineStart;
       updateJob(jobId, {
-        status: "failed",
-        error: schemaResult.error,
-        totalLatencyMs: Date.now() - pipelineStart,
+        appSpec: fallbackSpec,
+        status: "completed",
+        totalLatencyMs: totalLatency,
+        stageMetrics: {
+          ...getJob(jobId)!.stageMetrics,
+          appspec_generation: { stage: "appspec_generation", status: "completed", repairAttempts: [], latencyMs: 0 },
+        },
       });
-      emit({
-        type: "generation_failed",
-        timestamp: new Date().toISOString(),
-        error: schemaResult.error,
-      });
+      emit({ type: "stage_complete", stage: "appspec_generation", timestamp: new Date().toISOString(), data: fallbackSpec });
+      emit({ type: "generation_complete", timestamp: new Date().toISOString(), data: { appSpec: fallbackSpec, totalCostUsd: 0, totalLatencyMs: totalLatency, degraded: true } });
       return;
     }
 
@@ -213,22 +253,27 @@ async function runPipelineAsync(
     });
 
     if (!appSpecResult.appSpec) {
+      // Degraded mode: appspec generation failed — generate deterministic appspec
+      log.warn("AppSpec generation failed — entering degraded mode with deterministic appspec");
+      const fallbackSpec = generateDeterministicAppSpec(schemaResult.schema, intentResult.intent);
+      const totalLatency = Date.now() - pipelineStart;
+      updateJob(jobId, {
+        appSpec: fallbackSpec,
+        status: "completed",
+        totalLatencyMs: totalLatency,
+        stageMetrics: {
+          ...getJob(jobId)!.stageMetrics,
+          appspec_generation: { stage: "appspec_generation", status: "completed", repairAttempts: appSpecResult.repairAttempts, latencyMs: totalLatency },
+        },
+      });
       emit({
-        type: "stage_failed",
+        type: "stage_complete",
         stage: "appspec_generation",
         timestamp: new Date().toISOString(),
-        error: appSpecResult.error,
+        data: fallbackSpec,
         repairLog: appSpecResult.repairAttempts,
       });
-      updateJob(jobId, {
-        status: "failed",
-        error: appSpecResult.error,
-      });
-      emit({
-        type: "generation_failed",
-        timestamp: new Date().toISOString(),
-        error: appSpecResult.error,
-      });
+      emit({ type: "generation_complete", timestamp: new Date().toISOString(), data: { appSpec: fallbackSpec, totalCostUsd: 0, totalLatencyMs: totalLatency, degraded: true } });
       return;
     }
 

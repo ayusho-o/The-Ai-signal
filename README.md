@@ -48,30 +48,52 @@ User Prompt
     ▼
 ┌─────────────────────────────────────────────┐
 │            Pipeline Orchestrator            │
-│  ┌─────────────┐  ┌──────────┐  ┌───────┐  │
-│  │   Stage 1   │→ │ Stage 2  │→ │Stage 3│  │
-│  │   Intent    │  │  Schema  │  │AppSpec│  │
-│  │ Extraction  │  │   Gen    │  │  Gen  │  │
-│  └──────┬──────┘  └────┬─────┘  └───┬───┘  │
-│         │              │             │      │
-│    ┌────▼──────────────▼─────────────▼───┐  │
-│    │         Validation Engine           │  │
-│    │  Zod schemas + cross-layer checks   │  │
-│    └────────────────┬────────────────────┘  │
-│                     │ fails                 │
-│              ┌──────▼──────┐                │
-│              │Repair Engine│                │
-│              │ 1. Structural│               │
-│              │ 2. Field     │               │
-│              │ 3. Consistency│              │
-│              │ 4. AI Retry  │               │
-│              │ 5. Escalated │               │
-│              └─────────────┘                │
+│                                             │
+│  ┌──────────────┐                           │
+│  │   Stage 1    │  Groq llama-3.1-8b        │
+│  │   Intent     │  → AppIntent              │
+│  │  Extraction  │                           │
+│  └──────┬───────┘                           │
+│         │ validate → repair if needed       │
+│         ▼                                   │
+│  ┌──────────────┐                           │
+│  │   Stage 2    │  Gemini 1.5 Flash         │
+│  │   Schema     │  → DataSchema             │
+│  │  Generation  │                           │
+│  └──────┬───────┘                           │
+│         │ validate → repair if needed       │
+│         ▼                                   │
+│  ┌──────────────┐                           │
+│  │   Stage 3    │  Gemini 1.5 Flash         │
+│  │   AppSpec    │  → AppSpec                │
+│  │  Generation  │                           │
+│  └──────┬───────┘                           │
+│         │ validate → repair if needed       │
+│         ▼                                   │
+│  ┌─────────────────────────────────────┐    │
+│  │         Validation Engine           │    │
+│  │  Zod schemas + cross-layer checks   │    │
+│  └──────────────┬──────────────────────┘    │
+│                 │ fails                     │
+│         ┌───────▼───────┐                   │
+│         │ Repair Engine │                   │
+│         │ 1.Structural  │                   │
+│         │ 2.Field       │                   │
+│         │ 3.Consistency │                   │
+│         │ 4.AI Retry    │                   │
+│         │ 5.Escalated   │                   │
+│         └───────┬───────┘                   │
+│                 │ all fail                  │
+│         ┌───────▼───────┐                   │
+│         │Deterministic  │  ← NEW            │
+│         │   Fallback    │  No AI needed     │
+│         │  Generator    │  Always succeeds  │
+│         └───────────────┘                   │
 └─────────────────────────────────────────────┘
-    │                    │
-    ▼                    ▼
- SSE Stream          Job Store
-(real-time)         (in-memory)
+         │                    │
+         ▼                    ▼
+      SSE Stream          Job Store
+    (real-time)          (in-memory)
 ```
 
 ### Stage 1 — Intent Extraction
@@ -268,6 +290,7 @@ src/
 - **No real-time chat** — out of scope.
 - **Single process SSE** — SSE subscriptions are in-process. Multi-instance deployment needs a pub/sub layer (Redis Pub/Sub or similar).
 - **Vercel cold starts** — long-running pipeline stages (up to ~60s) can hit Vercel's 60s function timeout on the free tier. Recommend Pro plan or Railway for production.
+- **Degraded mode** — when all AI providers fail (quota/billing), the pipeline falls back to a deterministic template-based generator. Output is structurally valid but less semantically rich than AI-generated output. The UI clearly labels degraded runs.
 
 ---
 
